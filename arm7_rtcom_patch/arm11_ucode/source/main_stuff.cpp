@@ -22,8 +22,7 @@
 #define REG_IOSTATE	0x58	// IOState Register
 #define	REG_EFCR	0x78	// Extra Features Control Register
 
-#define	RX_MAX_WAIT	25
-#define RX_TIMEOUT	5000
+#define	RX_MAX_WAIT	35
 
 typedef int (*I2C_Read_Func)(void *x, u8 *dst, int dev, int src_addr, int count);
 typedef int (*I2C_Write_Func)(void *x, int dev, int dst_addr, const u8 *dst, int count);
@@ -110,8 +109,8 @@ void ir_beginComm() {
 }
 
 void ir_endComm() {
-	// Disable FIFO
-	ir_reg_write(REG_FCR, 0);
+	// Reset and disable FIFO
+	ir_reg_write(REG_FCR, 0x06);
 	// Enable sleep mode
 	ir_reg_write(REG_IER, BIT(4));
 	ir_reg_write(REG_IOSTATE, BIT(0));
@@ -150,9 +149,8 @@ void ir_send(u8 size) {
 
 u8 ir_recv() {
 	u8 *ptr = ir_buffer, rxlvl;
-	u16 i, timeout = RX_TIMEOUT;
+	u16 i;
 	u8 tc = 0;
-	bool enter = true;
 
 	// Reset and enable RX FIFO
 	//ir_reg_write(REG_FCR, 0x03);
@@ -161,15 +159,10 @@ u8 ir_recv() {
 
 	do {
 		i = 0;
-		while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < timeout)
+		while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < RX_MAX_WAIT)
 			i++;
-		if (i == timeout)
+		if (i == RX_MAX_WAIT)
 			break;
-		// TODO Could we remove this by eliminating the first timeout?
-		if (enter) {
-			timeout = RX_MAX_WAIT;
-			enter = false;
-		}
 
 		rxlvl = ir_reg_read(REG_RXLVL);
 		i2c_read(0, ptr + tc, 0xE, REG_FIFO, rxlvl);

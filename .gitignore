@@ -1,3 +1,7 @@
-TODO
+*.nds
+*.elf
+*.uc11
+arm7_rtcom_patch/*/build/
 tmp/
 action_replay_codes/
+TODO
