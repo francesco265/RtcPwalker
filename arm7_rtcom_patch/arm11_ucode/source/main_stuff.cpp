@@ -1,0 +1,230 @@
+#include <stddef.h>
+
+#include "a11ucode.h"
+#include "main_stuff.h"
+
+#define RELOC_ADDR ((void *)0x100000)
+#define RELOC_SIZE (0x28000)
+#define BIT(x) (1 << (x))
+
+// IR I2C registers
+#define REG_FIFO	0x00	// Receive / Transmit Holding Register
+#define REG_DLL		0x00	// Baudrate Divisor Latch Register Low
+#define REG_IER		0x08	// Interrupt Enable Register
+#define REG_DLH		0x08	// Baudrate Divisor Latch Register High
+#define REG_FCR		0x10	// FIFO Control Register
+#define REG_EFR		0x10	// Enhanced Feature Register
+#define REG_LCR		0x18	// Line Control Register
+#define REG_MCR		0x20	// Modem Control Register
+#define REG_LSR		0x28	// Line Status Register
+#define REG_TXLVL	0x40	// Transmitter FIFO Level Register
+#define REG_RXLVL	0x48	// Receiver FIFO Level Register
+#define REG_IOSTATE	0x58	// IOState Register
+#define	REG_EFCR	0x78	// Extra Features Control Register
+
+#define	RX_MAX_WAIT	25
+#define RX_TIMEOUT	5000
+
+typedef int (*I2C_Read_Func)(void *x, u8 *dst, int dev, int src_addr, int count);
+typedef int (*I2C_Write_Func)(void *x, int dev, int dst_addr, const u8 *dst, int count);
+
+static I2C_Read_Func i2c_read = nullptr;
+static I2C_Write_Func i2c_write = nullptr;
+
+static int is_initialized = 0;
+
+u8 ir_buffer[136];
+
+u8 ir_reg_read(int reg) {
+	u8 dst;
+    i2c_read(0, &dst, 0xE, reg, 1);
+	return dst;
+}
+
+void ir_reg_write(int reg, u8 value) {
+	i2c_write(0, 0xE, reg, &value, 1);
+}
+
+void ir_init() {
+    if (is_initialized) {
+        return;
+    }
+
+    const static uint8_t i2c_senddata_pattern[] = {0x70, 0xb5, 0x06, 0x46, 0x0b, 0x4c, 0x88,
+                                                   0x00, 0x0d, 0x18, 0x30, 0x46, 0x61, 0x5d};
+    size_t ptr = (size_t)pat_memesearch(i2c_senddata_pattern, nullptr, RELOC_ADDR, RELOC_SIZE,
+                                        sizeof(i2c_senddata_pattern), 2);
+    if (!ptr) {
+        return;
+    }
+    // add the nub device to the table as the last entry
+    vu8 *i2c_device_table = *(vu8 **)(ptr + 0x34);
+    i2c_device_table[0x46] = 0x2;
+    i2c_device_table[0x47] = 0x9A;
+
+    const static uint8_t i2c_read_pattern[] = {0xff, 0xb5, 0x81, 0xb0, 0x14, 0x46, 0x0d, 0x46,
+                                               0x1e, 0x46, 0x0a, 0x9f, 0x01, 0x98, 0x11, 0x46};
+    ptr = (size_t)pat_memesearch(i2c_read_pattern, nullptr, RELOC_ADDR, RELOC_SIZE,
+                                 sizeof(i2c_read_pattern), 2);
+    if (!ptr) {
+        return;
+    }
+    i2c_read = (I2C_Read_Func)(ptr | 1);
+
+    const static uint8_t i2c_write_pattern[] = {0xff, 0xb5, 0x81, 0xb0, 0x14, 0x46, 0x05,
+                                                0x46, 0x1e, 0x46, 0x0a, 0x9f, 0x02, 0x99};
+    ptr = (size_t)pat_memesearch(i2c_write_pattern, nullptr, RELOC_ADDR, RELOC_SIZE,
+                                 sizeof(i2c_write_pattern), 2);
+    if (!ptr) {
+        return;
+    }
+    i2c_write = (I2C_Write_Func)(ptr | 1);
+
+    is_initialized = 1;
+
+	// Set baud rate
+	u8 lcr = ir_reg_read(REG_LCR);
+
+	// Enable access to DLL and DLH
+	ir_reg_write(REG_LCR, lcr | BIT(7));
+	// Disable sleep mode
+	ir_reg_write(REG_IER, 0);
+
+	ir_reg_write(REG_DLL, 10);
+	ir_reg_write(REG_DLH, 0);
+
+	ir_reg_write(REG_LCR, lcr);
+	ir_reg_write(REG_IER, BIT(4));
+}
+
+void ir_beginComm() {
+	if (!is_initialized) {
+		ir_init();
+	}
+	// Disable sleep mode
+	ir_reg_write(REG_IER, 0);
+	// IOState must be 0
+	ir_reg_write(REG_IOSTATE, 0);
+	// Reset and enable FIFO
+	ir_reg_write(REG_FCR, 0x07);
+}
+
+void ir_endComm() {
+	// Disable FIFO
+	ir_reg_write(REG_FCR, 0);
+	// Enable sleep mode
+	ir_reg_write(REG_IER, BIT(4));
+	ir_reg_write(REG_IOSTATE, BIT(0));
+}
+
+// Send data using IR and start listening for incoming data
+void ir_send(u8 size) {
+	u8 *ptr = ir_buffer, txlvl;
+	u8 sent;
+
+	// Reset and enable TX FIFO
+	//ir_reg_write(REG_FCR, 0x05);
+	// Enable transmitter
+	ir_reg_write(REG_EFCR, 0x02);
+
+	do {
+		txlvl = ir_reg_read(REG_TXLVL);
+		sent = size > txlvl ? txlvl : size;
+		i2c_write(0, 0xE, REG_FIFO, ptr, sent);
+		ptr += sent;
+		size -= sent;
+	} while (size);
+
+	// Wait until THR and TSR are empty
+	while (!(ir_reg_read(REG_LSR) & BIT(6)));
+
+	// Enable receiver / Disable transmitter
+	// This is needed due to Rtcom overhead
+	ir_reg_write(REG_EFCR, 0x04);
+
+	// Disable transmitter and receiver
+	//ir_reg_write(REG_EFCR, 0x06);
+	// Disable FIFO
+	//ir_reg_write(REG_FCR, 0);
+}
+
+u8 ir_recv() {
+	u8 *ptr = ir_buffer, rxlvl;
+	u16 i, timeout = RX_TIMEOUT;
+	u8 tc = 0;
+	bool enter = true;
+
+	// Reset and enable RX FIFO
+	//ir_reg_write(REG_FCR, 0x03);
+	// Enable receiver
+	ir_reg_write(REG_EFCR, 0x04);
+
+	do {
+		i = 0;
+		while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < timeout)
+			i++;
+		if (i == timeout)
+			break;
+		// TODO Could we remove this by eliminating the first timeout?
+		if (enter) {
+			timeout = RX_MAX_WAIT;
+			enter = false;
+		}
+
+		rxlvl = ir_reg_read(REG_RXLVL);
+		i2c_read(0, ptr + tc, 0xE, REG_FIFO, rxlvl);
+		tc += rxlvl;
+	} while (1);
+
+	// Disable transmitter and receiver
+	ir_reg_write(REG_EFCR, 0x06);
+	// Disable FIFO
+	//ir_reg_write(REG_FCR, 0);
+
+	return tc;
+}
+
+__attribute__((optimize("Ofast"))) void *pat_memesearch(const void *patptr, const void *bitptr,
+                                                        const void *searchptr, u32 searchlen,
+                                                        u32 patsize, u32 alignment) {
+    const u8 *pat = (const u8 *)patptr;
+    const u8 *bit = (const u8 *)bitptr;
+    const u8 *src = (const u8 *)searchptr;
+
+    u32 i = 0;
+    u32 j = 0;
+
+    searchlen -= patsize;
+
+    if (bit) {
+        do {
+            if ((src[i + j] & ~bit[j]) == (pat[j] & ~bit[j])) {
+                if (++j != patsize) {
+                    continue;
+                }
+                // check alignment
+                if (((u32)src & (alignment - 1)) == 0) {
+                    return (void *)(src + i);
+                }
+            }
+            ++i;
+            j = 0;
+        } while (i != searchlen);
+    } else {
+        do {
+            if (src[i + j] == pat[j]) {
+                if (++j != patsize) {
+                    continue;
+                }
+                // check alignment
+                if (((u32)src & (alignment - 1)) == 0) {
+                    return (void *)(src + i);
+                }
+            }
+            ++i;
+            j = 0;
+        } while (i != searchlen);
+    }
+
+    return 0;
+}

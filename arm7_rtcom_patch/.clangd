@@ -1,0 +1,6 @@
+
+CompileFlags: # Tweak the parse settings
+  Add: 
+    - "-I/opt/devkitpro/libnds/include"
+    - "-I/opt/devkitpro/devkitARM/arm-none-eabi/include"
+    - "--target=arm"
