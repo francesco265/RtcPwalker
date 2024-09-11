@@ -45,6 +45,7 @@
 __attribute__((section(".text"))) static int RTCOM_STATE_TIMER = 0;
 
 static Ipc_proto *ipc_proto = (Ipc_proto *)RTCOM_DATA_OUTPUT;
+static bool fastMode = false;
 
 static void waitByLoop(volatile int count) {
     // 1 loop = 10 cycles = ~0.3us ???
@@ -52,7 +53,7 @@ static void waitByLoop(volatile int count) {
     }
 }
 
-static void rtcTransferReversed(u8 *cmd, u32 cmdLen, u8 *result, u32 resultLen, bool fastMode = false) {
+static void rtcTransferReversed(u8 *cmd, u32 cmdLen, u8 *result, u32 resultLen) {
     // Some games are sensitive to delays in the VBlank IRQ (the place where this code is called from)
     // to the point becoming literally unplayable (like graphics and timing glitches, etc).
     // To solve this problem we can reduce the following delays. As far as I know, they are completely unnecessary,
@@ -62,7 +63,7 @@ static void rtcTransferReversed(u8 *cmd, u32 cmdLen, u8 *result, u32 resultLen, 
     // So use large delays to upload code into Arm11 (just once, at startup),
     // and then small delays (or none at all) to simply read the CPad stuff, etc each frame.
     int initDelay = 2;
-    int bitTransferDelay = fastMode ? 1 : 9;
+    int bitTransferDelay = fastMode ? 1 : 14;
 
     // Raise CS
     RTC_CR8 = CS_0 | SCK_1 | SIO_1;
@@ -278,10 +279,21 @@ void Execute_Code_Async_via_RTCom(int param) {
     leaveCriticalSection(savedIrq);
 }
 
+#define DATAFLOW
+#ifdef CHECKSUM
+static u32 *arm9_checksum = (u32 *)(RTCOM_DATA_OUTPUT - 8);
+#endif
+static u32 *arm11_checksum = (u32 *)(RTCOM_DATA_OUTPUT - 4);
+static u8 *arm11_buffer = (u8 *)(RTCOM_DATA_OUTPUT + 16);
+#ifdef DATAFLOW
+static u32 *dataflow = (u32 *)(RTCOM_DATA_OUTPUT + 12);
+static u8 bo = 0;
+#endif
 static void Ir_service() {
 	if (ipc_proto->flags != 0xF)
 		return;
 
+	int savedIrq = enterCriticalSection();
 	u8 tc = 0;
 	u16 old_crtc = rtcom_beginComm();
 	switch (ipc_proto->opcode) {
@@ -289,31 +301,63 @@ static void Ir_service() {
 		case 1:
 			rtcom_executeUCode(1);
 			rtcom_requestNext(ipc_proto->size);
-			for (u8 i = 0; i < ipc_proto->size; i++)
-				rtcom_requestNext(ipc_proto->data[i]);
+#ifdef CHECKSUM
+			*arm9_checksum = 0;
+#endif
+			if (ipc_proto->size <= 16) {
+				for (u8 i = 0; i < ipc_proto->size; i++)
+					rtcom_requestNext(ipc_proto->data[i]);
+			} else {
+				for (u8 i = 0; i < ipc_proto->size; i++) {
+					do {
+						rtcom_requestNext(ipc_proto->data[i]);
+					} while (rtcom_getData());
+#ifdef CHECKSUM
+					*arm9_checksum += ipc_proto->data[i];
+#endif
+				}
+			}
+#ifdef DATAFLOW
+			dataflow[bo++] = (ipc_proto->data[10] ^ 0xAA) << 8 | (ipc_proto->data[0] ^ 0xAA);
+#endif
 			break;
 		// Recv data
 		case 2:
-			if (rtcom_executeUCode(2))
-				tc = rtcom_getData();
+			rtcom_executeUCode(2);
+			tc = rtcom_getData();
+			for (u8 i = 0; i < tc; i++) {
+				rtcom_requestNext();
+				ipc_proto->data[i] = rtcom_getData() ^ 0xAA;
+			}
 			ipc_proto->size = tc;
-			for (u8 i = 0; i < tc; i++)
-				ipc_proto->data[i] = rtcom_requestNext() ? rtcom_getData() ^ 0xAA : 0xAA;
+#ifdef DATAFLOW
+			if (tc)
+				dataflow[bo++] = ipc_proto->size << 8 | ipc_proto->data[0];
+#endif
 			break;
 		// beginComm and endComm
 		case 3:
 		//case 4: TODO rimettere a posto qua
 			rtcom_executeUCode(ipc_proto->opcode);
+#ifdef DATAFLOW
+			bo = 0;
+#endif
 			break;
 		case 4:
 			rtcom_executeUCode(ipc_proto->opcode);
-			for (u8 i = 0; i < 8; i++)
-				*((u8 *)(RTCOM_DATA_OUTPUT + 8 + i)) = rtcom_requestNext() ? rtcom_getData() : 0xFF;
+			*arm11_checksum = 0;
+			for (u8 i = 0; i < 136; i++) {
+				rtcom_requestNext();
+				tc = rtcom_getData(); // uso sta variabile per non creare un'altra
+				arm11_buffer[i] = tc;
+				*arm11_checksum += tc;
+			}
 			break;
 	}
-	ipc_proto->flags = 0xF0;
-
 	rtcom_endComm(old_crtc);
+	leaveCriticalSection(savedIrq);
+
+	ipc_proto->flags = 0xF0;
 }
 
 __attribute__((target("arm"))) void Update_RTCom() {
@@ -323,11 +367,10 @@ __attribute__((target("arm"))) void Update_RTCom() {
         Start = 0,
         UploadCode = 200,
 		IrBeginComm = UploadCode + 50,
-        ReadyToRead = IrBeginComm + 50,
+		EnableFastMode = IrBeginComm + 50,
+        ReadyToRead = EnableFastMode + 50,
     };
 
-	//*((char *)-1) = 'x';
-    // execute certain rtcom state depending on the timer value
     switch (RTCOM_STATE_TIMER) {
     case UploadCode:
         Init_RTCom();
@@ -336,6 +379,10 @@ __attribute__((target("arm"))) void Update_RTCom() {
 	case IrBeginComm:
 		// TODO Cambiare sta cosa hookandolo all'Init????
 		Execute_Code_Async_via_RTCom(3);
+		RTCOM_STATE_TIMER += 1;
+		break;
+	case EnableFastMode:
+		fastMode = true;
 		RTCOM_STATE_TIMER += 1;
 		break;
     case ReadyToRead: {

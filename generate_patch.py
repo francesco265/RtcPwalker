@@ -23,8 +23,8 @@ arm9_addresses = {
 
 arm7_addresses = {
     # rtcom block start addr; VBlank handler end addr; 
-    #'IPKI-73F49A89': [ 0x380C000, 0x37F87AC ]
-    'IPKI-73F49A89': [ 0x380C000, 0x37FA678 ]
+    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC ]
+    #'IPKI-73F49A89': [ 0x380C000, 0x37FA678 ]
 }
 
 def find_function_offset_in_asm_listing(asm_code, func_name):

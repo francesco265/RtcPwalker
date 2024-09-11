@@ -87,6 +87,9 @@ int main() {
 			buffer[1] = 0x01;
 			buffer[2] = 0;
 			buffer[3] = 0;
+			buffer[8] = 0x10;
+			buffer[9] = 0x90;
+			buffer[10] = 0x68;
 			checksum = compute_checksum(buffer, 8);
 			buffer[2] = checksum >> 8;
 			buffer[3] = checksum & 0xFF;
