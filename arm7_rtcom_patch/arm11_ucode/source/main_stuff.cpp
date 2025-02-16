@@ -149,24 +149,28 @@ void ir_send(u8 size) {
 	ir_reg_write(REG_EFCR, 0x04);
 
 	ptr = ir_buffer;
-	u8 i, rxlvl, tc = 0;
+	u8 rxlvl, tc = 0;
 
+	u16 i;
+	u16 timeout = 1000;
 	do {
 		i = 0;
+		/* while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < 80) */
+		/* 	i++; */
 		i2c_read(0, &rxlvl, 0xE, REG_RXLVL, 1);
-		while (!rxlvl && i < 80) {
+		while (!rxlvl && i < timeout) {
 			i++;
 			i2c_read(0, &rxlvl, 0xE, REG_RXLVL, 1);
 		}
-		if (i == 80)
+		if (i == timeout)
 			break;
+		timeout = 80;
 
+		//i2c_read(0, &rxlvl, 0xE, REG_RXLVL, 1);
 		i2c_read(0, ptr, 0xE, REG_FIFO, rxlvl);
 		ptr += rxlvl;
 		tc += rxlvl;
-		if (tc == 136)
-			break;
-	} while (1);
+	} while (tc < 136);
 
 	ir_buffer_size = tc;
 }

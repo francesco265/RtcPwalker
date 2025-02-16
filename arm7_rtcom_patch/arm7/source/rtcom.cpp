@@ -233,6 +233,11 @@ bool rtcom_executeUCode(u8 param) { return rtcom_request(RTCOM_REQ_EXECUTE_UCODE
 // ----------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------
 
+void readTimer2(u8 *readVal, u32 readValLen) {
+    u8 readCmd = RTC_READ_ALARM_TIME_2;
+    rtcTransferReversed(&readCmd, 1, readVal, readValLen);
+}
+
 void Init_RTCom() {
     int savedIrq = enterCriticalSection();
     while (true) {
@@ -280,15 +285,28 @@ void Execute_Code_Async_via_RTCom(int param) {
 }
 
 #define DATAFLOW
-#ifdef CHECKSUM
-static u32 *arm9_checksum = (u32 *)(RTCOM_DATA_OUTPUT - 8);
-#endif
-static u32 *arm11_checksum = (u32 *)(RTCOM_DATA_OUTPUT - 4);
-static u8 *arm11_buffer = (u8 *)(RTCOM_DATA_OUTPUT + 16);
+#define TIMER
 #ifdef DATAFLOW
-static u32 *dataflow = (u32 *)(RTCOM_DATA_OUTPUT + 12);
+static u32 *dataflow = (u32 *)(RTCOM_DATA_OUTPUT + 8);
 static u8 bo = 0;
 #endif
+#ifdef TIMER
+static u32 *timing = (u32 *)(RTCOM_DATA_OUTPUT + 12);
+static u8 bo2 = 0;
+void stop_timer() {
+	TIMER2_CR = 0;
+	TIMER3_CR = 0;
+	timing[bo2] = (TIMER3_DATA << 16 | TIMER2_DATA);
+	bo2 += 2;
+}
+void start_timer() {
+	TIMER3_DATA = 0;
+	TIMER2_DATA = 0;
+	TIMER3_CR = TIMER_ENABLE | TIMER_CASCADE;
+	TIMER2_CR = TIMER_ENABLE;
+}
+#endif
+static u8 *arm11_buffer = (u8 *)(RTCOM_DATA_OUTPUT + 16);
 static void Ir_service() {
 	if (ipc_proto->flags != 0xF)
 		return;
@@ -299,40 +317,64 @@ static void Ir_service() {
 	switch (ipc_proto->opcode) {
 		// Send data
 		case 1:
+#ifdef TIMER
+			start_timer();
+#endif
 			rtcom_executeUCode(1);
 			rtcom_requestNext(ipc_proto->size);
-#ifdef CHECKSUM
-			*arm9_checksum = 0;
-#endif
 			if (ipc_proto->size <= 16) {
-				for (u8 i = 0; i < ipc_proto->size; i++)
+				for (u8 i = 0; i < ipc_proto->size; i++) {
 					rtcom_requestNext(ipc_proto->data[i]);
+#ifdef TIMER
+					// Next byte will trigger data transfer
+					if (i == ipc_proto->size - 1) {
+						stop_timer();
+						start_timer();
+					}
+#endif
+				}
 			} else {
 				for (u8 i = 0; i < ipc_proto->size; i++) {
 					do {
 						rtcom_requestNext(ipc_proto->data[i]);
 					} while (rtcom_getData());
-#ifdef CHECKSUM
-					*arm9_checksum += ipc_proto->data[i];
+#ifdef TIMER
+					if (i == ipc_proto->size - 1) {
+						stop_timer();
+						start_timer();
+					}
 #endif
 				}
 			}
+#ifdef TIMER
+			stop_timer();
+#endif
 #ifdef DATAFLOW
-			dataflow[bo++] = (ipc_proto->data[10] ^ 0xAA) << 8 | (ipc_proto->data[0] ^ 0xAA);
+			dataflow[bo] = ipc_proto->size << 8 | (ipc_proto->data[0] ^ 0xAA);
+			bo += 2;
 #endif
 			break;
 		// Recv data
 		case 2:
 			rtcom_executeUCode(2);
 			tc = rtcom_getData();
-			for (u8 i = 0; i < tc; i++) {
+			for (u8 i = 0; i < tc; i += 3) {
 				rtcom_requestNext();
-				ipc_proto->data[i] = rtcom_getData() ^ 0xAA;
+				ipc_proto->data[i++] = rtcom_getData();
+				/* readValLen = tc - i; */
+				readTimer2((u8 *)(ipc_proto->data + i), 3);
+				/* if (readValLen) { */
+				/* 	readValLen = readValLen < 3 ? readValLen : 3; */
+				/* 	readTimer2((u8 *)(ipc_proto->data + i), readValLen); */
+				/* 	i += readValLen; */
+				/* } */
 			}
 			ipc_proto->size = tc;
 #ifdef DATAFLOW
-			if (tc)
-				dataflow[bo++] = ipc_proto->size << 8 | ipc_proto->data[0];
+			if (tc) {
+				dataflow[bo] = ipc_proto->size << 8 | ipc_proto->data[0];
+				bo += 2;
+			}
 #endif
 			break;
 		// beginComm and endComm
@@ -342,19 +384,23 @@ static void Ir_service() {
 #ifdef DATAFLOW
 			bo = 0;
 #endif
+#ifdef TIMER
+			bo2 = 0;
+#endif
 			break;
 		case 4:
 			rtcom_executeUCode(ipc_proto->opcode);
-			*arm11_checksum = 0;
 			for (u8 i = 0; i < 136; i++) {
 				rtcom_requestNext();
-				tc = rtcom_getData(); // uso sta variabile per non creare un'altra
-				arm11_buffer[i] = tc;
-				*arm11_checksum += tc;
+				arm11_buffer[i] = rtcom_getData();
 			}
 			break;
 	}
 	rtcom_endComm(old_crtc);
+	// TEST
+	rtcom_requestKill();
+	rtcom_requestAsync(RTCOM_STAT_DONE);
+	// TEST
 	leaveCriticalSection(savedIrq);
 
 	ipc_proto->flags = 0xF0;
@@ -367,8 +413,7 @@ __attribute__((target("arm"))) void Update_RTCom() {
         Start = 0,
         UploadCode = 200,
 		IrBeginComm = UploadCode + 50,
-		EnableFastMode = IrBeginComm + 50,
-        ReadyToRead = EnableFastMode + 50,
+        ReadyToRead = IrBeginComm + 50,
     };
 
     switch (RTCOM_STATE_TIMER) {
@@ -379,16 +424,12 @@ __attribute__((target("arm"))) void Update_RTCom() {
 	case IrBeginComm:
 		// TODO Cambiare sta cosa hookandolo all'Init????
 		Execute_Code_Async_via_RTCom(3);
-		RTCOM_STATE_TIMER += 1;
-		break;
-	case EnableFastMode:
 		fastMode = true;
 		RTCOM_STATE_TIMER += 1;
 		break;
-    case ReadyToRead: {
+    case ReadyToRead:
 		Ir_service();
         break;
-    }
     default:
         RTCOM_STATE_TIMER += 1;
         break;
