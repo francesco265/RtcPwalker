@@ -324,7 +324,6 @@ static void Ir_service() {
 			rtcom_requestNext(ipc_proto->size);
 			if (ipc_proto->size <= 16) {
 				for (u8 i = 0; i < ipc_proto->size; i++) {
-					rtcom_requestNext(ipc_proto->data[i]);
 #ifdef TIMER
 					// Next byte will trigger data transfer
 					if (i == ipc_proto->size - 1) {
@@ -332,18 +331,19 @@ static void Ir_service() {
 						start_timer();
 					}
 #endif
+					rtcom_requestNext(ipc_proto->data[i]);
 				}
 			} else {
 				for (u8 i = 0; i < ipc_proto->size; i++) {
-					do {
-						rtcom_requestNext(ipc_proto->data[i]);
-					} while (rtcom_getData());
 #ifdef TIMER
 					if (i == ipc_proto->size - 1) {
 						stop_timer();
 						start_timer();
 					}
 #endif
+					do {
+						rtcom_requestNext(ipc_proto->data[i]);
+					} while (rtcom_getData());
 				}
 			}
 #ifdef TIMER
