@@ -284,8 +284,6 @@ void Execute_Code_Async_via_RTCom(int param) {
     leaveCriticalSection(savedIrq);
 }
 
-#define DATAFLOW
-#define TIMER
 #ifdef DATAFLOW
 static u32 *dataflow = (u32 *)(RTCOM_DATA_OUTPUT + 8);
 static u8 bo = 0;
@@ -307,7 +305,7 @@ void start_timer() {
 }
 #endif
 static u8 *arm11_buffer = (u8 *)(RTCOM_DATA_OUTPUT + 16);
-static void Ir_service() {
+__attribute__((target("arm"))) void Ir_service() {
 	if (ipc_proto->flags != 0xF)
 		return;
 
@@ -397,10 +395,8 @@ static void Ir_service() {
 			break;
 	}
 	rtcom_endComm(old_crtc);
-	// TEST
 	rtcom_requestKill();
-	rtcom_requestAsync(RTCOM_STAT_DONE);
-	// TEST
+	rtcom_signalDone();
 	leaveCriticalSection(savedIrq);
 
 	ipc_proto->flags = 0xF0;
@@ -428,7 +424,9 @@ __attribute__((target("arm"))) void Update_RTCom() {
 		RTCOM_STATE_TIMER += 1;
 		break;
     case ReadyToRead:
-		Ir_service();
+		//Ir_service();
+		// Overwrite the IRQ handler jumptable entry for IPCSYNC
+		*(u32 **) IRQ_JUMPTABLE = (u32 *) Ir_service;
         break;
     default:
         RTCOM_STATE_TIMER += 1;

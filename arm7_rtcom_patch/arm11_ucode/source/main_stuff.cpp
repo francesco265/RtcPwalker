@@ -46,19 +46,16 @@ void ir_init() {
 }
 
 void ir_beginComm() {
-	static u8 is_initialized = 0;
-	if (!is_initialized)
+	static u8 inited = 0;
+	if (!inited)
 		ir_init();
-	is_initialized = 1;
+	inited = 1;
 
 	// Disable sleep mode
 	I2C_write(REG_IER, 0);
 	// IOState must be 0
 	I2C_write(REG_IOSTATE, 0);
-	// Reset and enable FIFO
-	//I2C_write(REG_FCR, 0x07); //TODO l'ho disattivato e messo in ir_recv
-	// Enable receiver
-	//I2C_write(REG_EFCR, 0x04); //TODO l'ho disattivato e messo in ir_recv
+
 	ir_buffer_size = 0;
 }
 
@@ -122,6 +119,9 @@ void ir_send(u8 size) {
 		ptr += rxlvl;
 		tc += rxlvl;
 	} while (tc < 136);
+
+	// Disable transmitter and receiver
+	I2C_write(REG_EFCR, 0x06);
 
 	ir_buffer_size = tc;
 }

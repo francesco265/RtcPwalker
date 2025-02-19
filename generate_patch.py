@@ -18,12 +18,12 @@ arm7_update_rtcom_function_name = 'Update_RTCom'
 
 arm9_addresses = {
     # ir recv addr 1; ir recv addr 2; ir send addr;
-    'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6]
+    'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6 ]
 }
 
 arm7_addresses = {
-    # rtcom block start addr; VBlank handler end addr; 
-    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC ]
+    # rtcom block start addr; VBlank handler end addr; IRQ jumptable (irq 16 entry) addr
+    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x03806AC8 ]
     #'IPKI-73F49A89': [ 0x380C000, 0x37FA678 ]
 }
 
@@ -36,11 +36,11 @@ def find_function_offset_in_asm_listing(asm_code, func_name):
         raise Exception(f"Can't find the function '{func_name}' in the object file")
     return addr
 
-def assemble_arm7_rtcom_patch(rtc_code_block_start_addr):
+def assemble_arm7_rtcom_patch(rtc_code_block_start_addr, irq_jumptable_addr):
     arm7_patch_dir = 'arm7_rtcom_patch'
     try:
         subprocess.check_output(
-            [make_exe_path, '--directory', arm7_patch_dir],
+            [make_exe_path, f'EXTERNAL_DEFINES=-DIRQ_JUMPTABLE={irq_jumptable_addr}', '--directory', arm7_patch_dir],
             stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         print(e.output.decode('utf-8'))
@@ -110,9 +110,9 @@ def generate_action_replay_code(rom_id, arm9=True, arm7=True):
     # Arm7 Patch
 
     if arm7:
-        rtcom_code_addr, vblank_handler_end_addr = arm7_addresses[rom_id]
+        rtcom_code_addr, vblank_handler_end_addr, irq_jumptable_addr = arm7_addresses[rom_id]
 
-        update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr)
+        update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr, irq_jumptable_addr)
         branch_to_rtcom_update = instr__arm_b(vblank_handler_end_addr, rtcom_code_addr + update_rtcom_offset)
 
         action_replay_code += f"""

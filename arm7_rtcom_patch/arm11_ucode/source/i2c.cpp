@@ -36,7 +36,7 @@ void I2C_init(void)
 
 	while(g_i2cBus->cnt & I2C_EN);
 	g_i2cBus->cntex = I2C_CLK_STRETCH_EN;
-	g_i2cBus->scl = I2C_DELAYS(3u, 0u);
+	g_i2cBus->scl = I2C_DELAYS(1u, 0u);
 }
 
 static bool startTransfer(const u32 devAddr, const u32 regAddr, const bool read)
