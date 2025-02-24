@@ -17,7 +17,7 @@ action_replay_folder_name = 'action_replay_codes'
 arm7_update_rtcom_function_name = 'Update_RTCom'
 
 arm9_addresses = {
-    # ir recv addr 1; ir recv addr 2; ir send addr;
+    # ir recv call 1; ir recv call 2; ir send call;
     'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6 ]
 }
 

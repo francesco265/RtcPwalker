@@ -39,27 +39,15 @@ extern "C" int handleCommand1(u8 param, u32 stage) {
 		null_count = 0;
 
 		// Transfer to buffer finished
-		if (i == data_size) {
-			/* opcode = 0; */
+		if (i == data_size)
 			ir_send(data_size);
-			/* data_size = 0; */
-		}
 	} else if (opcode == 2) {
 		u8 data = ir_buffer[i++] ^ 0xAA;
 		*(vu8 *)(RTC_REG_TIMER2 + 2) = ir_buffer[i++] ^ 0xAA;
 		*(vu8 *)(RTC_REG_TIMER2 + 1) = ir_buffer[i++] ^ 0xAA;
 		*(vu8 *)(RTC_REG_TIMER2) = ir_buffer[i++] ^ 0xAA;
 		*(vu8 *)(RTC_CNT) |= 0x40;
-		/* u8 j = 2; */
-		/* while (i < data_size && j >= 0) */
-		/* 	*(vu8 *)(RTC_REG_TIMER2 + j--) = ir_buffer[i++] ^ 0xAA; */
-		/* if (j < 2) */
-		/* 	*(vu8 *)(RTC_CNT) |= 0x40; */
 
-		/* if (i == data_size) { */
-		/* 	opcode = 0; */
-		/* 	data_size = 0; */
-		/* } */
 		return data;
 	} else if (opcode == 4) {
 		return ir_buffer[i++];

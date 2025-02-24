@@ -4,9 +4,6 @@
 #include "main_stuff.h"
 #include "i2c.h"
 
-#define RELOC_ADDR ((void *)0x100000)
-#define RELOC_SIZE (0x28000)
-
 // IR I2C registers
 #define REG_FIFO	0x00	// Receive / Transmit Holding Register
 #define REG_DLL		0x00	// Baudrate Divisor Latch Register Low
@@ -25,7 +22,7 @@
 #define	RX_MAX_WAIT	40
 
 u8 ir_buffer[136];
-u8 ir_buffer_size = 0;
+static u8 ir_buffer_size = 0;
 
 void ir_init() {
 	I2C_init();
@@ -67,11 +64,29 @@ void ir_endComm() {
 	I2C_write(REG_IOSTATE, BIT(0));
 }
 
+static inline u8 rx(u16 timeout) {
+	u8 *ptr = ir_buffer, tc = 0, rxlvl;
+	u16 i;
+
+	do {
+		i = 0;
+		while (!(rxlvl = I2C_read(REG_RXLVL)) && i++ < timeout);
+		if (i - 1 == timeout)
+			break;
+		timeout = RX_MAX_WAIT;
+
+		I2C_readArray(REG_FIFO, ptr, rxlvl);
+		ptr += rxlvl;
+		tc += rxlvl;
+	} while (tc < 136);
+
+	return tc;
+}
+
 // Send data using IR and start listening for incoming data
 void ir_send(u8 size) {
-	u8 *ptr = ir_buffer;
+	u8 *ptr = ir_buffer, tc;
 
-	// I2C_write(REG_FCR, 0x07); // TODO rimuovere
 	// Enable transmitter / Disable receiver
 	I2C_write(REG_EFCR, 0x02);
 
@@ -96,29 +111,7 @@ void ir_send(u8 size) {
 	// Enable receiver / Disable transmitter
 	I2C_write(REG_EFCR, 0x04);
 
-	ptr = ir_buffer;
-	u8 rxlvl, tc = 0;
-
-	u16 i;
-	u16 timeout = 1000;
-	do {
-		i = 0;
-		/* while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < 80) */
-		/* 	i++; */
-		rxlvl = I2C_read(REG_RXLVL);
-		while (!rxlvl && i < timeout) {
-			i++;
-			rxlvl = I2C_read(REG_RXLVL);
-		}
-		if (i == timeout)
-			break;
-		timeout = RX_MAX_WAIT;
-
-		//i2c_read(0, &rxlvl, 0xE, REG_RXLVL, 1);
-		I2C_readArray(REG_FIFO, ptr, rxlvl);
-		ptr += rxlvl;
-		tc += rxlvl;
-	} while (tc < 136);
+	tc = rx(1000);
 
 	// Disable transmitter and receiver
 	I2C_write(REG_EFCR, 0x06);
@@ -127,39 +120,21 @@ void ir_send(u8 size) {
 }
 
 u8 ir_recv() {
+	u8 tc;
 	if (ir_buffer_size) {
-		u8 tc = ir_buffer_size;
+		tc = ir_buffer_size;
 		ir_buffer_size = 0;
 		return tc;
 	}
 
 	u8 *ptr = ir_buffer;
-	u8 i, rxlvl;
 
 	// Reset and enable FIFO
 	I2C_write(REG_FCR, 0x07);
 	// Enable receiver
 	I2C_write(REG_EFCR, 0x04);
 
-	do {
-		i = 0;
-		// while (!(ir_reg_read(REG_LSR) & BIT(0)) && i < RX_MAX_WAIT)
-		rxlvl = I2C_read(REG_RXLVL);
-		while (!rxlvl && i < RX_MAX_WAIT) {
-			i++;
-			rxlvl = I2C_read(REG_RXLVL);
-		}
-		if (i == RX_MAX_WAIT)
-			break;
+	tc = rx(RX_MAX_WAIT);
 
-		//i2c_read(0, &rxlvl, 0xE, REG_RXLVL, 1);
-		I2C_readArray(REG_FIFO, ptr, rxlvl);
-		ptr += rxlvl;
-	} while (1);
-
-	// Disable transmitter and receiver
-	// I2C_write(REG_EFCR, 0x06);
-
-	//return tc;
-	return ptr - ir_buffer;
+	return tc;
 }
