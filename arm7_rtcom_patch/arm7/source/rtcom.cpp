@@ -409,7 +409,8 @@ __attribute__((target("arm"))) void Update_RTCom() {
         Start = 0,
         UploadCode = 200,
 		IrBeginComm = UploadCode + 50,
-        ReadyToRead = IrBeginComm + 50,
+        ReadyToRead = IrBeginComm + 750,
+		Finish = ReadyToRead + 1
     };
 
     switch (RTCOM_STATE_TIMER) {
@@ -426,8 +427,11 @@ __attribute__((target("arm"))) void Update_RTCom() {
     case ReadyToRead:
 		//Ir_service();
 		// Overwrite the IRQ handler jumptable entry for IPCSYNC
-		*(u32 **) IRQ_JUMPTABLE = (u32 *) Ir_service;
+		*((u32 **) IRQ_JUMPTABLE_ADDR + (16 << 2)) = (u32 *) Ir_service;
+		RTCOM_STATE_TIMER += 1;
         break;
+	case Finish:
+		return;
     default:
         RTCOM_STATE_TIMER += 1;
         break;

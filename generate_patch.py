@@ -22,9 +22,8 @@ arm9_addresses = {
 }
 
 arm7_addresses = {
-    # rtcom block start addr; VBlank handler end addr; IRQ jumptable (irq 16 entry) addr
-    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x03806AC8 ]
-    #'IPKI-73F49A89': [ 0x380C000, 0x37FA678 ]
+    # rtcom block start addr; VBlank handler end addr; IRQ jumptable addr
+    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x03806A88 ]
 }
 
 def find_function_offset_in_asm_listing(asm_code, func_name):
@@ -40,7 +39,7 @@ def assemble_arm7_rtcom_patch(rtc_code_block_start_addr, irq_jumptable_addr):
     arm7_patch_dir = 'arm7_rtcom_patch'
     try:
         subprocess.check_output(
-            [make_exe_path, f'EXTERNAL_DEFINES=-DIRQ_JUMPTABLE={irq_jumptable_addr}', '--directory', arm7_patch_dir],
+            [make_exe_path, f'EXTERNAL_DEFINES=-DIRQ_JUMPTABLE_ADDR={irq_jumptable_addr}', '--directory', arm7_patch_dir],
             stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         print(e.output.decode('utf-8'))
