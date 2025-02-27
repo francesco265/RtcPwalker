@@ -284,27 +284,6 @@ void Execute_Code_Async_via_RTCom(int param) {
     leaveCriticalSection(savedIrq);
 }
 
-#ifdef DATAFLOW
-static u32 *dataflow = (u32 *)(RTCOM_DATA_OUTPUT + 8);
-static u8 bo = 0;
-#endif
-#ifdef TIMER
-static u32 *timing = (u32 *)(RTCOM_DATA_OUTPUT + 12);
-static u8 bo2 = 0;
-void stop_timer() {
-	TIMER2_CR = 0;
-	TIMER3_CR = 0;
-	timing[bo2] = (TIMER3_DATA << 16 | TIMER2_DATA);
-	bo2 += 2;
-}
-void start_timer() {
-	TIMER3_DATA = 0;
-	TIMER2_DATA = 0;
-	TIMER3_CR = TIMER_ENABLE | TIMER_CASCADE;
-	TIMER2_CR = TIMER_ENABLE;
-}
-#endif
-static u8 *arm11_buffer = (u8 *)(RTCOM_DATA_OUTPUT + 16);
 __attribute__((target("arm"))) void Ir_service() {
 	if (ipc_proto->flags != 0xF)
 		return;
@@ -315,42 +294,18 @@ __attribute__((target("arm"))) void Ir_service() {
 	switch (ipc_proto->opcode) {
 		// Send data
 		case 1:
-#ifdef TIMER
-			start_timer();
-#endif
 			rtcom_executeUCode(1);
 			rtcom_requestNext(ipc_proto->size);
 			if (ipc_proto->size <= 16) {
-				for (u8 i = 0; i < ipc_proto->size; i++) {
-#ifdef TIMER
-					// Next byte will trigger data transfer
-					if (i == ipc_proto->size - 1) {
-						stop_timer();
-						start_timer();
-					}
-#endif
+				for (u8 i = 0; i < ipc_proto->size; i++)
 					rtcom_requestNext(ipc_proto->data[i]);
-				}
 			} else {
 				for (u8 i = 0; i < ipc_proto->size; i++) {
-#ifdef TIMER
-					if (i == ipc_proto->size - 1) {
-						stop_timer();
-						start_timer();
-					}
-#endif
 					do {
 						rtcom_requestNext(ipc_proto->data[i]);
 					} while (rtcom_getData());
 				}
 			}
-#ifdef TIMER
-			stop_timer();
-#endif
-#ifdef DATAFLOW
-			dataflow[bo] = ipc_proto->size << 8 | (ipc_proto->data[0] ^ 0xAA);
-			bo += 2;
-#endif
 			break;
 		// Recv data
 		case 2:
@@ -359,39 +314,14 @@ __attribute__((target("arm"))) void Ir_service() {
 			for (u8 i = 0; i < tc; i += 3) {
 				rtcom_requestNext();
 				ipc_proto->data[i++] = rtcom_getData();
-				/* readValLen = tc - i; */
 				readTimer2((u8 *)(ipc_proto->data + i), 3);
-				/* if (readValLen) { */
-				/* 	readValLen = readValLen < 3 ? readValLen : 3; */
-				/* 	readTimer2((u8 *)(ipc_proto->data + i), readValLen); */
-				/* 	i += readValLen; */
-				/* } */
 			}
 			ipc_proto->size = tc;
-#ifdef DATAFLOW
-			if (tc) {
-				dataflow[bo] = ipc_proto->size << 8 | ipc_proto->data[0];
-				bo += 2;
-			}
-#endif
 			break;
 		// beginComm and endComm
 		case 3:
-		//case 4: TODO rimettere a posto qua
-			rtcom_executeUCode(ipc_proto->opcode);
-#ifdef DATAFLOW
-			bo = 0;
-#endif
-#ifdef TIMER
-			bo2 = 0;
-#endif
-			break;
 		case 4:
 			rtcom_executeUCode(ipc_proto->opcode);
-			for (u8 i = 0; i < 136; i++) {
-				rtcom_requestNext();
-				arm11_buffer[i] = rtcom_getData();
-			}
 			break;
 	}
 	rtcom_endComm(old_crtc);

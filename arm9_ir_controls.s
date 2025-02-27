@@ -1,36 +1,64 @@
+@ Make request to arm7; r0 = address, r1 = size, r2 = opcode; returns data size if opcode is 2
+MakeRequest:
+	push {r4-r6}
+	ldr r5, Reg_IPCSYNC
+	ldr r6, RTCom_Output
+
+	str r0, [r6, #4]
+	strh r1, [r6, #2]
+	strb r2, [r6]
+
+	@ Start request
+	mov r4, #0xf
+	strb r4, [r6, #1]
+	mov r4, #1
+	lsl r4, r4, #13
+	strh r4, [r5]
+
+WaitACK:
+	ldrb r0, [r6, #1]
+	cmp r0, #0xf0
+	bne WaitACK
+
+	ldrh r0, [r6, #2]
+	pop {r4-r6}
+	bx lr
+
+# IrInit:
+# 	push {lr}
+
+# 	mov r0, #0
+# 	mov r1, #0
+# 	mov r2, #3
+# 	bl MakeRequest
+
+# 	pop {lr}
+# 	bx lr
+
+# IrEnd:
+# 	push {lr}
+
+# 	mov r0, #0
+# 	mov r1, #0
+# 	mov r2, #4
+# 	bl MakeRequest
+
+# 	pop {lr}
+# 	bx lr
+
 @ r0 = buffer address; returns size of the received data
 IrRecvData:
-	push {r1, r4-r6, r9}
-	
-	ldr r9, RTCom_Output
+	push {r5, r6, lr}
 
-	@ Store opcode 2
-	mov r1, #2
-	strb r1, [r9]
-	@ Store address
-	str r0, [r9, #4]
-	@ Start request
-	mov r1, #0xf
-	strb r1, [r9, #1]
+	mov r5, r0
+	mov r1, #0
+	mov r2, #2
+	bl MakeRequest
 
-	@ IPCSYNC
-	ldr r4, Reg_IPCSYNC
-	mov r1, #1
-	mov r1, r1, lsl #13
-	strh r1, [r4]
-
-	@ Wait for arm7 ACK
-RecvACKWait:
-	ldrb r1, [r9, #1]
-	cmp r1, #0xf0
-	bne RecvACKWait
-
-	ldrh r1, [r9, #2]
-	cmp r1, #1
+	cmp r0, #1
 	bls Return
 	
-	mov r5, r0
-	mov r6, r1
+	mov r6, r0
 	@ Invalidate cache (r5 = address, r6 = size)
 	add	r6, r6, r5
 	tst	r5, #31
@@ -45,24 +73,13 @@ Invalidate:
 	blt	Invalidate
 	
 Return:
-	mov r0, r1
-	pop {r1, r4-r6, r9}
+	pop {r5, r6, lr}
 	bx lr
 
 @ r0 = buffer address, r1 = buffer size
 IrSendData:
-	push {r4-r6, r9}
+	push {r5, r6, lr}
 
-	ldr r9, RTCom_Output
-
-	@ Store opcode 1
-	mov r4, #1
-	strb r4, [r9]
-	@ Store address
-	str r0, [r9, #4]
-	@ Store size
-	strh r1, [r9, #2]
-	
 	mov r5, r0
 	mov r6, r1
 	@ Flush cache to memory (r5 = address, r6 = size)
@@ -76,23 +93,11 @@ Flush:
 	mov r5, #0
 	mcr p15, 0, r5, c7, c10, 4
 
-	@ Start request
-	mov r4, #0xf
-	strb r4, [r9, #1]
-
-	@ IPCSYNC
-	ldr r4, Reg_IPCSYNC
-	mov r1, #1
-	mov r1, r1, lsl #13
-	strh r1, [r4]
+	@ Make request to arm7
+	mov r2, #1
+	bl MakeRequest
 	
-	@ Wait for arm7 ACK
-SendACKWait:
-	ldrb r4, [r9, #1]
-	cmp r4, #0xf0
-	bne SendACKWait
-
-	pop {r4-r6, r9}
+	pop {r5, r6, lr}
 	bx lr
 
 Reg_IPCSYNC: .long 0x04000180
