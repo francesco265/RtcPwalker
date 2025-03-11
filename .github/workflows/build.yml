@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+    sources:
+      - 'arm7_rtcom_patch/**'
+      - 'arm9_ir_controls.s'
+      - 'generate_patch.py'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4     
+      - name: Setup environment
+        run: git config --global safe.directory '*'
+      - name: Build
+        run: |
+          python generate_patch.py
+          cd action_replay_codes
+          zip codes.zip *.txt
+      - name: Upload first artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: usrcheat
+          path: action_replay_codes/usrcheat.dat
+      - name: Upload second artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codes
+          path: action_replay_codes/codes.zip
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get short commit hash
+        id: commit_hash
+        run: echo 'sha_short=$(git rev-parse --short ${{ github.sha }})' >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "RtcPwalker ${{ steps.commit_hash.outputs.sha_short }}"
+          files: artifacts/*
