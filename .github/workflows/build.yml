@@ -20,16 +20,12 @@ jobs:
           python3 generate_patch.py ${{ github.ref_name }}
           cd action_replay_codes
           zip codes.zip *.txt
-      - name: Upload first artifact
+          rm *.txt
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: usrcheat
-          path: action_replay_codes/usrcheat.dat
-      - name: Upload second artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: codes
-          path: action_replay_codes/codes.zip
+          name: cheatcodes
+          path: action_replay_codes/
 
   release:
     name: Create GitHub Release
@@ -39,6 +35,7 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
+          name: cheatcodes
           path: artifacts
       - name: Create Release
         uses: softprops/action-gh-release@v2
