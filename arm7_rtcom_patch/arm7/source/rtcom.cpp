@@ -338,9 +338,8 @@ __attribute__((target("arm"))) void Update_RTCom() {
     enum RtcomStateTime {
         Start = 0,
         UploadCode = 200,
-		IrBeginComm = UploadCode + 50,
-        ReadyToRead = IrBeginComm + 750,
-		Finish = ReadyToRead + 1
+		IrReady = UploadCode + 800,
+		Finish = IrReady + 1
     };
 
     switch (RTCOM_STATE_TIMER) {
@@ -348,14 +347,9 @@ __attribute__((target("arm"))) void Update_RTCom() {
         Init_RTCom();
         RTCOM_STATE_TIMER += 1;
         break;
-	case IrBeginComm:
-		// TODO Cambiare sta cosa hookandolo all'Init????
-		Execute_Code_Async_via_RTCom(3);
-		fastMode = true;
-		RTCOM_STATE_TIMER += 1;
-		break;
-    case ReadyToRead:
+    case IrReady:
 		// Overwrite the IRQ handler jumptable entry for IPCSYNC
+		fastMode = true;
 		((u32 **) IRQ_JUMPTABLE_ADDR)[16] = (u32 *) Ir_service;
 		RTCOM_STATE_TIMER += 1;
         break;

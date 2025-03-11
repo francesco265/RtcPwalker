@@ -17,13 +17,17 @@ action_replay_folder_name = 'action_replay_codes'
 arm7_update_rtcom_function_name = 'Update_RTCom'
 
 arm9_addresses = {
-    # ir recv call 1; ir recv call 2; ir send call;
-    'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6 ]
+    # ir recv call 1; ir recv call 2; ir send call; ir init call; ir end branch
+    'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ]
 }
 
 arm7_addresses = {
     # rtcom block start addr; VBlank handler end addr; IRQ jumptable addr
-    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x03806A88 ]
+    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x3806A88 ]
+}
+
+rom_info = {
+    'IPKI-73F49A89': 'HG-Italy'
 }
 
 def find_function_offset_in_asm_listing(asm_code, func_name):
@@ -79,7 +83,7 @@ def assemble_arm9_controls_hook_patch(asm_symbols_params):
 
     return bytearray(open(assembled_patch_filename, 'rb').read()), asm_code
 
-def generate_action_replay_code(rom_id, arm9=True, arm7=True):
+def generate_action_replay_code(rom_id):
     def ar_code__bulk_write(bin: bytearray, address: int):
         if len(bin) % 8 != 0:  # make the size a multiple of 8
             bin += b'\x00' * (8 - len(bin) % 8)
@@ -108,47 +112,56 @@ def generate_action_replay_code(rom_id, arm9=True, arm7=True):
     ####################################################################################
     # Arm7 Patch
 
-    if arm7:
-        rtcom_code_addr, vblank_handler_end_addr, irq_jumptable_addr = arm7_addresses[rom_id]
+    rtcom_code_addr, vblank_handler_end_addr, irq_jumptable_addr = arm7_addresses[rom_id]
 
-        update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr, irq_jumptable_addr)
-        branch_to_rtcom_update = instr__arm_b(vblank_handler_end_addr, rtcom_code_addr + update_rtcom_offset)
+    update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr, irq_jumptable_addr)
+    branch_to_rtcom_update = instr__arm_b(vblank_handler_end_addr, rtcom_code_addr + update_rtcom_offset)
 
-        action_replay_code += f"""
-            5{vblank_handler_end_addr:07X} E12FFF1E # if the patch wasn't uploaded yet
-                {ar_code__bulk_write(arm7_patch_bytes, rtcom_code_addr)} # write the Arm7 + Arm11 code
-                0{vblank_handler_end_addr:07X} {branch_to_rtcom_update:08X} # Hook the VBlank IRQ Handler
-            D2000000 00000000
-        """
+    action_replay_code += f"""
+        5{vblank_handler_end_addr:07X} E12FFF1E # if the patch wasn't uploaded yet
+            {ar_code__bulk_write(arm7_patch_bytes, rtcom_code_addr)} # write the Arm7 + Arm11 code
+            0{vblank_handler_end_addr:07X} {branch_to_rtcom_update:08X} # Hook the VBlank IRQ Handler
+        D2000000 00000000
+    """
 
 
     ####################################################################################
     # Arm9 Patch
 
-    if arm9:
-        arm9_patch_code, arm9_patch_asm = assemble_arm9_controls_hook_patch([])
+    arm9_patch_code, arm9_patch_asm = assemble_arm9_controls_hook_patch([])
 
-        recv1_addr, recv2_addr, send_addr = arm9_addresses[rom_id]
-        ir_recv_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrRecvData")
-        ir_send_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrSendData")
-        recv1_branch_instr = instr__thumb_blx(recv1_addr, ARM9_CONTROLS_BASE_ADDR + ir_recv_offset)
-        recv2_branch_instr = instr__thumb_blx(recv2_addr, ARM9_CONTROLS_BASE_ADDR + ir_recv_offset)
-        send_branch_instr = instr__thumb_blx(send_addr, ARM9_CONTROLS_BASE_ADDR + ir_send_offset)
+    recv1_addr, recv2_addr, send_addr, init_addr, end_addr = arm9_addresses[rom_id]
+    ir_recv_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrRecvData")
+    ir_send_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrSendData")
+    ir_init_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrInit")
+    ir_end_offset  = find_function_offset_in_asm_listing(arm9_patch_asm, "IrEnd")
+    recv1_branch_instr = instr__thumb_blx(recv1_addr, ARM9_CONTROLS_BASE_ADDR + ir_recv_offset)
+    recv2_branch_instr = instr__thumb_blx(recv2_addr, ARM9_CONTROLS_BASE_ADDR + ir_recv_offset)
+    send_branch_instr = instr__thumb_blx(send_addr, ARM9_CONTROLS_BASE_ADDR + ir_send_offset)
+    init_branch_instr = instr__thumb_blx(init_addr, ARM9_CONTROLS_BASE_ADDR + ir_init_offset)
+    end_branch_instr = instr__thumb_blx(end_addr, ARM9_CONTROLS_BASE_ADDR + ir_end_offset, exchange=False)
 
-        # Send branch is not 4 bytes aligned :(
-        # 0x21E59A4 = 1C29
-        # 0x21E59AA = BD38
-        action_replay_code += f"""
-            5{recv1_addr:07X} E9AAF6F8 # if the patch wasn't uploaded yet
-                {ar_code__bulk_write(arm9_patch_code, ARM9_CONTROLS_BASE_ADDR)}
-                
-                # insert an instruction to branch into the patch code
-                0{recv1_addr:07X} {recv1_branch_instr:08X}
-                0{recv2_addr:07X} {recv2_branch_instr:08X}
-                0{send_addr-2:07X} {send_branch_instr & 0xFFFF:04X}1C29
-                0{send_addr+2:07X} BD38{(send_branch_instr & 0xFFFF0000) >> 16:04X}
-            D2000000 00000000
-        """
+    # Send branch is not 4 bytes aligned :(
+    # 0x21E59A4 = 1C29
+    # 0x21E59AA = BD38
+    #
+    # Neither is the init branch
+    # 0x21E5904 = B508
+    # 0x21E590A = 2032
+    action_replay_code += f"""
+        5{recv1_addr:07X} E9AAF6F8 # if the patch wasn't uploaded yet
+            {ar_code__bulk_write(arm9_patch_code, ARM9_CONTROLS_BASE_ADDR)}
+            
+            # insert an instruction to branch into the patch code
+            0{recv1_addr:07X} {recv1_branch_instr:08X}
+            0{recv2_addr:07X} {recv2_branch_instr:08X}
+            0{send_addr-2:07X} {send_branch_instr & 0xFFFF:04X}1C29
+            0{send_addr+2:07X} BD38{(send_branch_instr & 0xFFFF0000) >> 16:04X}
+            0{init_addr-2:07X} {init_branch_instr & 0xFFFF:04X}B508
+            0{init_addr+2:07X} 2032{(init_branch_instr & 0xFFFF0000) >> 16:04X}
+            0{end_addr:07X} {end_branch_instr:08X}
+        D2000000 00000000
+    """
 
     # remove comments, indentation, and empty lines
     formatted_cheatcode = ""
@@ -243,19 +256,11 @@ def main():
 
     cheat_codes = defaultdict(list)
 
-    rom_id = 'IPKI-73F49A89'
-    codes = generate_action_replay_code(rom_id)
-    with open(f'{action_replay_folder_name}/{rom_id}.txt', 'w') as f:
-        f.write(codes)
-    cheat_codes[rom_id].append({'code': codes, 'name': 'Pokewalker 3DS IR'})
-    codes = generate_action_replay_code(rom_id, arm7=False)
-    with open(f'{action_replay_folder_name}/{rom_id}_arm9only.txt', 'w') as f:
-        f.write(codes)
-    cheat_codes[rom_id].append({'code': codes, 'name': 'Pokewalker 3DS IR (ARM9 only)'})
-    codes = generate_action_replay_code(rom_id, arm9=False)
-    with open(f'{action_replay_folder_name}/{rom_id}_arm7only.txt', 'w') as f:
-        f.write(codes)
-    cheat_codes[rom_id].append({'code': codes, 'name': 'Pokewalker 3DS IR (ARM7 only)'})
+    for rom_id, info in rom_info.items():
+        codes = generate_action_replay_code(rom_id)
+        with open(f'{action_replay_folder_name}/{rom_id}({info}).txt', 'w') as f:
+            f.write(codes)
+        cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker'})
 
     usrcheat_file = generate_usrcheat_dat_file_with_ar_codes(cheat_codes)
     with open(f'{action_replay_folder_name}/usrcheat.dat', 'wb') as f:

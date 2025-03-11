@@ -24,28 +24,6 @@ WaitACK:
 	pop {r4-r6}
 	bx lr
 
-# IrInit:
-# 	push {lr}
-
-# 	mov r0, #0
-# 	mov r1, #0
-# 	mov r2, #3
-# 	bl MakeRequest
-
-# 	pop {lr}
-# 	bx lr
-
-# IrEnd:
-# 	push {lr}
-
-# 	mov r0, #0
-# 	mov r1, #0
-# 	mov r2, #4
-# 	bl MakeRequest
-
-# 	pop {lr}
-# 	bx lr
-
 @ r0 = buffer address; returns size of the received data
 IrRecvData:
 	push {r5, r6, lr}
@@ -99,6 +77,29 @@ Flush:
 	
 	pop {r5, r6, lr}
 	bx lr
+
+IrInit:
+	push {lr}
+
+	mov r0, #0
+	mov r1, #0
+	mov r2, #3
+	bl MakeRequest
+
+	pop {lr}
+	bx lr
+
+.thumb_func
+IrEnd:
+	push {r0-r2}
+
+	mov r0, #0
+	mov r1, #0
+	mov r2, #4
+	blx MakeRequest
+
+	pop {r0-r2}
+	pop {r3-r5, pc}
 
 Reg_IPCSYNC: .long 0x04000180
 RTCom_Output: .long 0x027FF400
