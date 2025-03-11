@@ -2,7 +2,12 @@ import re
 import os
 import struct
 import subprocess
+from sys import argv
 from collections import defaultdict
+
+version = ''
+if len(argv) > 1:
+    version = f' {argv[1]}'
 
 ARM9_CONTROLS_BASE_ADDR = 0x023C0040
 
@@ -260,7 +265,7 @@ def main():
         codes = generate_action_replay_code(rom_id)
         with open(f'{action_replay_folder_name}/{rom_id}({info}).txt', 'w') as f:
             f.write(codes)
-        cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker'})
+        cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker{version}'})
 
     usrcheat_file = generate_usrcheat_dat_file_with_ar_codes(cheat_codes)
     with open(f'{action_replay_folder_name}/usrcheat.dat', 'wb') as f:
