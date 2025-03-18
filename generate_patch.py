@@ -9,7 +9,7 @@ version = ''
 if len(argv) > 1:
     version = f' {argv[1]}'
 
-ARM9_CONTROLS_BASE_ADDR = 0x023C0040
+ARM9_CONTROLS_BASE_ADDR = 0x23C0200
 
 asm_exe_path = '/opt/devkitpro/devkitARM/bin/arm-none-eabi-as'
 objcopy_exe_path = '/opt/devkitpro/devkitARM/bin/arm-none-eabi-objcopy'
@@ -21,18 +21,64 @@ tmp_folder_name = 'tmp'
 action_replay_folder_name = 'action_replay_codes'
 arm7_update_rtcom_function_name = 'Update_RTCom'
 
-arm9_addresses = {
-    # ir recv call 1; ir recv call 2; ir send call; ir init call; ir end branch
-    'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ]
+# This is the original opcode used for branching to the ir recv function,
+# we use it just to check if the patch was already applied
+addr_opcode = {
+    'Italy': 0xE9AAF6F8,
+    'USA': 0xE97AF6F8,
+    'Spain': 0xE966F6F8,
+    'Germany': 0xE98AF6F8,
+    'France': 0xE96AF6F8,
+    'Japan': 0xEB16F6F8,
 }
 
-arm7_addresses = {
-    # rtcom block start addr; VBlank handler end addr; IRQ jumptable addr
-    'IPKI-73F49A89': [ 0x380C000, 0x37F87AC, 0x3806A88 ]
+arm9_addresses = [
+    # ir recv call 2; ir recv call 1; ir send call; ir init call; ir end branch
+    0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0
+]
+
+# Games from different regions have variations in the addresses of the IR functions, so we need to adjust them
+arm9_addresses_offsets = {
+    'Italy': 0,
+    'USA': 0x60,
+    'Spain': 0x80,
+    'Germany': 0x40,
+    'France': 0x80,
+    'Japan': -0xA60,
 }
 
+# arm9_addresses = {
+#     # ir recv call 1; ir recv call 2; ir send call; ir init call; ir end branch
+#     'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ],
+#     'IPGI-0DAA88EF': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ],
+#     'IPKE-4DFFBF91': [ 0x21E5B9C, 0x21E5978, 0x21E5A06, 0x21E5966, 0x21E7950 ], # 0x60 offset
+#     'IPGE-2D5118CA': [ 0x21E5B9C, 0x21E5978, 0x21E5A06, 0x21E5966, 0x21E7950 ], # 0x60 offset
+#     'IPKS-F88ADC52': [ 0x21E5BBC, 0x21E5998, 0x21E5A26, 0x21E5986, 0x21E7970 ], # 0x80 offset
+#     'IPGS-1D38C3BC': [ 0x21E5BBC, 0x21E5998, 0x21E5A26, 0x21E5986, 0x21E7970 ], # 0x80 offset
+# }
+
+arm7_addresses = [
+    # rtcom block start addr; VBlank handler end addr
+    0x380C000, 0x37F87AC
+]
+
+# rom_info = {
+#     'IPKI-73F49A89': 'HG-Italy',
+#     'IPGI-0DAA88EF': 'SS-Italy',
+#     'IPKE-4DFFBF91': 'HG-USA',
+#     'IPGE-2D5118CA': 'SS-USA',
+#     'IPKS-F88ADC52': 'HG-Spain',
+#     'IPGS-1D38C3BC': 'SS-Spain'
+# }
+
+# HeartGold and SoulSilver game IDs for each region
 rom_info = {
-    'IPKI-73F49A89': 'HG-Italy'
+    'Italy': ['IPKI-73F49A89', 'IPGI-0DAA88EF'],
+    'USA': ['IPKE-4DFFBF91', 'IPGE-2D5118CA'],
+    'Spain': ['IPKS-F88ADC52', 'IPGS-1D38C3BC'],
+    'Germany': ['IPKD-1CAB3FD9', 'IPGD-E30FD415'],
+    'France': ['IPKF-F16A1F7B', 'IPGF-E1041645'],
+    'Japan': ['IPKJ-A587D7CD', 'IPGJ-7387AC7F']
 }
 
 def find_function_offset_in_asm_listing(asm_code, func_name):
@@ -44,11 +90,11 @@ def find_function_offset_in_asm_listing(asm_code, func_name):
         raise Exception(f"Can't find the function '{func_name}' in the object file")
     return addr
 
-def assemble_arm7_rtcom_patch(rtc_code_block_start_addr, irq_jumptable_addr):
+def assemble_arm7_rtcom_patch(rtc_code_block_start_addr):
     arm7_patch_dir = 'arm7_rtcom_patch'
     try:
         subprocess.check_output(
-            [make_exe_path, f'EXTERNAL_DEFINES=-DIRQ_JUMPTABLE_ADDR={irq_jumptable_addr}', '--directory', arm7_patch_dir],
+            [make_exe_path, '--directory', arm7_patch_dir],
             stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         print(e.output.decode('utf-8'))
@@ -88,7 +134,7 @@ def assemble_arm9_controls_hook_patch(asm_symbols_params):
 
     return bytearray(open(assembled_patch_filename, 'rb').read()), asm_code
 
-def generate_action_replay_code(rom_id):
+def generate_action_replay_code(region):
     def ar_code__bulk_write(bin: bytearray, address: int):
         if len(bin) % 8 != 0:  # make the size a multiple of 8
             bin += b'\x00' * (8 - len(bin) % 8)
@@ -117,9 +163,9 @@ def generate_action_replay_code(rom_id):
     ####################################################################################
     # Arm7 Patch
 
-    rtcom_code_addr, vblank_handler_end_addr, irq_jumptable_addr = arm7_addresses[rom_id]
+    rtcom_code_addr, vblank_handler_end_addr = arm7_addresses
 
-    update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr, irq_jumptable_addr)
+    update_rtcom_offset, arm7_patch_bytes = assemble_arm7_rtcom_patch(rtcom_code_addr)
     branch_to_rtcom_update = instr__arm_b(vblank_handler_end_addr, rtcom_code_addr + update_rtcom_offset)
 
     action_replay_code += f"""
@@ -135,7 +181,7 @@ def generate_action_replay_code(rom_id):
 
     arm9_patch_code, arm9_patch_asm = assemble_arm9_controls_hook_patch([])
 
-    recv1_addr, recv2_addr, send_addr, init_addr, end_addr = arm9_addresses[rom_id]
+    recv1_addr, recv2_addr, send_addr, init_addr, end_addr = [addr + arm9_addresses_offsets[region] for addr in arm9_addresses]
     ir_recv_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrRecvData")
     ir_send_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrSendData")
     ir_init_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrInit")
@@ -154,7 +200,7 @@ def generate_action_replay_code(rom_id):
     # 0x21E5904 = B508
     # 0x21E590A = 2032
     action_replay_code += f"""
-        5{recv1_addr:07X} E9AAF6F8 # if the patch wasn't uploaded yet
+        5{recv1_addr:07X} {addr_opcode[region]:08X} # if the patch wasn't uploaded yet
             {ar_code__bulk_write(arm9_patch_code, ARM9_CONTROLS_BASE_ADDR)}
             
             # insert an instruction to branch into the patch code
@@ -261,11 +307,13 @@ def main():
 
     cheat_codes = defaultdict(list)
 
-    for rom_id, info in rom_info.items():
-        codes = generate_action_replay_code(rom_id)
-        with open(f'{action_replay_folder_name}/{rom_id}({info}).txt', 'w') as f:
-            f.write(codes)
-        cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker{version}'})
+    for region, rom_ids in rom_info.items():
+        # The patch is the same for both HG and SS
+        codes = generate_action_replay_code(region)
+        for i, rom_id in enumerate(rom_ids):
+            with open(f'{action_replay_folder_name}/{rom_id}({'HG' if i == 0 else 'SS'}-{region}).txt', 'w') as f:
+                f.write(codes)
+            cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker{version}'})
 
     usrcheat_file = generate_usrcheat_dat_file_with_ar_codes(cheat_codes)
     with open(f'{action_replay_folder_name}/usrcheat.dat', 'wb') as f:

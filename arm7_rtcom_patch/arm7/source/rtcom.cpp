@@ -38,7 +38,8 @@
 #define RTC_READ_ALARM_DATE_1_EXT 0x79
 #define RTC_READ_ALARM_DATE_2_EXT 0x7B
 
-#define RTCOM_DATA_OUTPUT 0x027FF400
+#define RTCOM_DATA_OUTPUT 0x27FF400
+#define IRQ_JUMPTABLE_ADDR 0x3806A88
 
 // an attempt to put global variables next to the code for easier memory control;
 // be aware of the compiler error "unaligned opcodes detected in executable segment"
