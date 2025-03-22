@@ -47,29 +47,10 @@ arm9_addresses_offsets = {
     'Japan': -0xA60,
 }
 
-# arm9_addresses = {
-#     # ir recv call 1; ir recv call 2; ir send call; ir init call; ir end branch
-#     'IPKI-73F49A89': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ],
-#     'IPGI-0DAA88EF': [ 0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0 ],
-#     'IPKE-4DFFBF91': [ 0x21E5B9C, 0x21E5978, 0x21E5A06, 0x21E5966, 0x21E7950 ], # 0x60 offset
-#     'IPGE-2D5118CA': [ 0x21E5B9C, 0x21E5978, 0x21E5A06, 0x21E5966, 0x21E7950 ], # 0x60 offset
-#     'IPKS-F88ADC52': [ 0x21E5BBC, 0x21E5998, 0x21E5A26, 0x21E5986, 0x21E7970 ], # 0x80 offset
-#     'IPGS-1D38C3BC': [ 0x21E5BBC, 0x21E5998, 0x21E5A26, 0x21E5986, 0x21E7970 ], # 0x80 offset
-# }
-
 arm7_addresses = [
     # rtcom block start addr; VBlank handler end addr
     0x380C000, 0x37F87AC
 ]
-
-# rom_info = {
-#     'IPKI-73F49A89': 'HG-Italy',
-#     'IPGI-0DAA88EF': 'SS-Italy',
-#     'IPKE-4DFFBF91': 'HG-USA',
-#     'IPGE-2D5118CA': 'SS-USA',
-#     'IPKS-F88ADC52': 'HG-Spain',
-#     'IPGS-1D38C3BC': 'SS-Spain'
-# }
 
 # HeartGold and SoulSilver game IDs for each region
 rom_info = {
@@ -311,7 +292,8 @@ def main():
         # The patch is the same for both HG and SS
         codes = generate_action_replay_code(region)
         for i, rom_id in enumerate(rom_ids):
-            with open(f'{action_replay_folder_name}/{rom_id}({'HG' if i == 0 else 'SS'}-{region}).txt', 'w') as f:
+            gametype = 'HG' if i == 0 else 'SS'
+            with open(f'{action_replay_folder_name}/{rom_id}({gametype}-{region}).txt', 'w') as f:
                 f.write(codes)
             cheat_codes[rom_id].append({'code': codes, 'name': f'RtcPwalker{version}'})
 
