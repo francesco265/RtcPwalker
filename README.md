@@ -27,6 +27,3 @@ This project wouldn't have been possible without the contributions of the commun
 - [**Circle Pad patch for SM64DS**](https://gbatemp.net/threads/circle-pad-patches-for-super-mario-64-ds-and-other-games-in-twilightmenu-with-twpatcher-and-rtcom.623267/) by _Shoco_ -- I borrowed many parts of his code.
 - [**Pokewalker hacking**](https://dmitry.gr/?r=05.Projects&proj=28.%20pokewalker) by _Dmitry_ -- Thanks to his excellent work I was able to understand the communication protocol between the Pokewalker and the 3DS, very useful for debugging.
 - [**libn3ds**](https://github.com/profi200/libn3ds) by _profi200_ -- I used his implementation of the i2c protocol to communicate with the IR transceiver.
-
----
-If you want to support me and my work or show your appreciation for this project, consider buying me a coffee :coffee: <3
