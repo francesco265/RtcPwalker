@@ -297,16 +297,8 @@ __attribute__((target("arm"))) void Ir_service() {
 		case 1:
 			rtcom_executeUCode(1);
 			rtcom_requestNext(ipc_proto->size);
-			if (ipc_proto->size <= 16) {
-				for (u8 i = 0; i < ipc_proto->size; i++)
-					rtcom_requestNext(ipc_proto->data[i]);
-			} else {
-				for (u8 i = 0; i < ipc_proto->size; i++) {
-					do {
-						rtcom_requestNext(ipc_proto->data[i]);
-					} while (rtcom_getData());
-				}
-			}
+			for (u8 i = 0; i < ipc_proto->size; i++)
+				rtcom_requestNext(ipc_proto->data[i]);
 			break;
 		// Recv data
 		case 2:
