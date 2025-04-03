@@ -9,6 +9,7 @@ If you are interested in another project related to Pokewalker hacking, check [*
 ## How to use
 
 1. Patch the **TWL_FIRM** using [TWPatch](https://www.gamebrew.org/wiki/TWPatch_3DS), make sure that **RTCom** is enabled before patching. You can use this [guide](https://wiki.ds-homebrew.com/twilightmenu/playing-in-widescreen) as a reference on how to patch the firmware and how to load it when using **TWiLight Menu++**.
+    - **NOTE:** If you decide to patch the TWL_FIRM enabling **only** RTCom you can just leave the patched `TwlBg.cxi` in the `sd:/luma/sysmodules/`, in this way every time you boot a DS game, the patched TWL_FIRM will be loaded. Just remember to enable `external FIRMs and modules` in the Luma3DS configuration.
 2. The game patch is implemented as an Action Replay code: just add the Action Replay code relative to your game version to your **usrcheat.dat** file or directly use the **usrcheat.dat** provided (place it in `_nds/TWiLightMenu/extras/`). All files can be found in the [**releases**](https://github.com/francesco265/RtcPwalker/releases/latest) GitHub section.
 3. Enable the patch in the cheat menu of **TWiLight Menu++**.
 
@@ -32,4 +33,5 @@ This project wouldn't have been possible without the contributions of the commun
 ---
 This project required many hours of reverse engineering and painful debugging, if you appreciate my works and want to support me, you can offer me a coffee :coffee::heart:.
 
-**BTC**: `bc1qvvjndu7mqe9l2ze4sm0eqzkq839m0w6ldms8ex`
+- **BTC**: `bc1qvvjndu7mqe9l2ze4sm0eqzkq839m0w6ldms8ex`
+- **PayPal**: [![](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=AAZDH3SM7T9P6)
