@@ -26,6 +26,7 @@ arm7_update_rtcom_function_name = 'Update_RTCom'
 addr_opcode = {
     'Italy': 0xE9AAF6F8,
     'USA': 0xE97AF6F8,
+    'EUR': 0xE97AF6F8,
     'Spain': 0xE966F6F8,
     'Germany': 0xE98AF6F8,
     'France': 0xE96AF6F8,
@@ -41,6 +42,7 @@ arm9_addresses = [
 arm9_addresses_offsets = {
     'Italy': 0,
     'USA': 0x60,
+    'EUR': 0x60,
     'Spain': 0x80,
     'Germany': 0x40,
     'France': 0x80,
@@ -56,6 +58,7 @@ arm7_addresses = [
 rom_info = {
     'Italy': ['IPKI-73F49A89', 'IPGI-0DAA88EF'],
     'USA': ['IPKE-4DFFBF91', 'IPGE-2D5118CA'],
+    'EUR': ['IPKE-AD102382', 'IPGE-CDBE84D9'],
     'Spain': ['IPKS-F88ADC52', 'IPGS-1D38C3BC'],
     'Germany': ['IPKD-1CAB3FD9', 'IPGD-E30FD415'],
     'France': ['IPKF-F16A1F7B', 'IPGF-E1041645'],
