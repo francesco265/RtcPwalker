@@ -45,9 +45,8 @@
 // an attempt to put global variables next to the code for easier memory control;
 // be aware of the compiler error "unaligned opcodes detected in executable segment"
 __attribute__((section(".text"))) static int RTCOM_STATE_TIMER = 0;
-
-static Ipc_proto *ipc_proto = (Ipc_proto *)RTCOM_DATA_OUTPUT;
-static bool fastMode = false;
+__attribute__((section(".text"))) static Ipc_proto *ipc_proto = (Ipc_proto *)RTCOM_DATA_OUTPUT;
+__attribute__((section(".text"))) static bool fastMode = false;
 
 static void waitByLoop(volatile int count) {
     // 1 loop = 10 cycles = ~0.3us ???

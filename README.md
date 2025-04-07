@@ -1,22 +1,24 @@
 # HGSS/Pokewalker communication using 3DS built-in infrared transceiver
 
+> **This project is still EXPERIMENTAL, please consider that it might not work consistently and on all consoles.**
+
 This is a patch for HG/SS games that enables communications with the Pokewalker without needing a IR capable cartridge, as it uses the 3DS built-in IR transceiver.
 Thanks to **RTCom**, the ARM7 processor is able to communicate with the ARM11, which has access to the IR transceiver registers.
 
 If you are interested in another project related to Pokewalker hacking, check [**pwalkerHax**](https://github.com/francesco265/pwalkerHax).
-[Here](https://youtu.be/f6f8RSxqG20) you can find a demo of my two projects in action (**pwalkerHax** + **RtcPwalker**).
+You can find a demo of my two projects in action [Here](https://youtu.be/f6f8RSxqG20) (**pwalkerHax** + **RtcPwalker**).
 
 ## How to use
 
 1. Patch the **TWL_FIRM** using [TWPatch](https://www.gamebrew.org/wiki/TWPatch_3DS), make sure that **RTCom** is enabled before patching. You can use this [guide](https://wiki.ds-homebrew.com/twilightmenu/playing-in-widescreen) as a reference on how to patch the firmware and how to load it when using **TWiLight Menu++**.
-    - **NOTE:** If you decide to patch the TWL_FIRM enabling **only** RTCom you can just leave the patched `TwlBg.cxi` in the `sd:/luma/sysmodules/`, in this way every time you boot a DS game, the patched TWL_FIRM will be loaded. Just remember to enable `external FIRMs and modules` in the Luma3DS configuration.
+    - **NOTE:** If you decide to patch the TWL_FIRM enabling RTCom **only** you can just leave the patched `TwlBg.cxi` in the `sd:/luma/sysmodules/`, in this way every time you boot a DS game, the patched TWL_FIRM will be loaded. Just remember to enable `external FIRMs and modules` in the Luma3DS configuration.
 2. The game patch is implemented as an Action Replay code: just add the Action Replay code relative to your game version to your **usrcheat.dat** file or directly use the **usrcheat.dat** provided (place it in `_nds/TWiLightMenu/extras/`). All files can be found in the [**releases**](https://github.com/francesco265/RtcPwalker/releases/latest) GitHub section.
 3. Enable the patch in the cheat menu of **TWiLight Menu++**.
 
 ## Disclaimers
 
 - Communication with the Pokewalker is tricky, as the 3DS needs to follow the strict timings of the Pokewalker. RTCom adds a big overhead to the communication, thus the communication is **SLOW and UNSTABLE**, but it works :wink:.
-Simply try again if it fails, especially when sending the pokemon to the Pokewalker, it should work after a few tries. If it still doesn't work, try to return to the Pokewalker selection menu and try again. **(Starting from version 1.2, I managed to reduce RTCom overhead, leading to a much more solid communication).**
+Simply try again if it fails, especially when sending the pokemon to the Pokewalker, it should work after a few tries. If it still doesn't work, try to return to the Pokewalker selection menu and try again.
 - Make sure to point the Pokewalker towards the 3DS IR transceiver, which is the black spot on the back side of the console.
 - **If the game doesn't boot** while the patch is enabled, it means that you don't have **RTCom** installed: make sure that TWiLight Menu is loading the patched TWL_FIRM.
 - This patch was only tested on an **Old3DS**, as it is the only console I have access to. It should work on a **New3DS** as well, but I can't guarantee it.

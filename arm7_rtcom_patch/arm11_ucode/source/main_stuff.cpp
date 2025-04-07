@@ -52,6 +52,8 @@ void ir_beginComm() {
 	I2C_write(REG_IER, 0);
 	// IOState must be 0
 	I2C_write(REG_IOSTATE, 0);
+	// Reset and enable FIFO
+	I2C_write(REG_FCR, 0x07);
 
 	ir_buffer_size = 0;
 }

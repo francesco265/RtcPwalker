@@ -11,8 +11,7 @@ MakeRequest:
 	@ Start request
 	mov r4, #0xf
 	strb r4, [r6, #1]
-	mov r4, #1
-	lsl r4, r4, #13
+	mov r4, #0x2000
 	strh r4, [r5]
 
 WaitACK:
