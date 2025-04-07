@@ -10,6 +10,7 @@ if len(argv) > 1:
     version = f' {argv[1]}'
 
 ARM9_CONTROLS_BASE_ADDR = 0x23C0200
+RTCOM_DATA_ADDR = 0x27FF410
 
 asm_exe_path = '/opt/devkitpro/devkitARM/bin/arm-none-eabi-as'
 objcopy_exe_path = '/opt/devkitpro/devkitARM/bin/arm-none-eabi-objcopy'
@@ -33,9 +34,17 @@ addr_opcode = {
     'Japan': 0xEB16F6F8,
 }
 
-arm9_addresses = [
+arm9_func_addresses = [
     # ir recv call 2; ir recv call 1; ir send call; ir init call; ir end branch
     0x21E5B3C, 0x21E5918, 0x21E59A6, 0x21E5906, 0x21E78F0
+]
+
+arm9_bufferhead_addresses = [
+    0x21E593C, 0x21E59AC, 0x21E5A6C, 0x21E5B30, 0x21E5CC8
+]
+
+arm9_bufferpayload_addresses = [
+    0x21E59B0, 0x21E5CD4
 ]
 
 # Games from different regions have variations in the addresses of the IR functions, so we need to adjust them
@@ -165,7 +174,7 @@ def generate_action_replay_code(region):
 
     arm9_patch_code, arm9_patch_asm = assemble_arm9_controls_hook_patch([])
 
-    recv1_addr, recv2_addr, send_addr, init_addr, end_addr = [addr + arm9_addresses_offsets[region] for addr in arm9_addresses]
+    recv1_addr, recv2_addr, send_addr, init_addr, end_addr = [addr + arm9_addresses_offsets[region] for addr in arm9_func_addresses]
     ir_recv_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrRecvData")
     ir_send_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrSendData")
     ir_init_offset = find_function_offset_in_asm_listing(arm9_patch_asm, "IrInit")
@@ -175,6 +184,18 @@ def generate_action_replay_code(region):
     send_branch_instr = instr__thumb_blx(send_addr, ARM9_CONTROLS_BASE_ADDR + ir_send_offset)
     init_branch_instr = instr__thumb_blx(init_addr, ARM9_CONTROLS_BASE_ADDR + ir_init_offset)
     end_branch_instr = instr__thumb_blx(end_addr, ARM9_CONTROLS_BASE_ADDR + ir_end_offset, exchange=False)
+
+    buf_addr_overwrite = ""
+    for addr in arm9_bufferhead_addresses:
+        addr += arm9_addresses_offsets[region]
+        buf_addr_overwrite += f"""
+            0{addr:07X} {RTCOM_DATA_ADDR:08X}
+        """
+    for addr in arm9_bufferpayload_addresses:
+        addr += arm9_addresses_offsets[region]
+        buf_addr_overwrite += f"""
+            0{addr:07X} {RTCOM_DATA_ADDR + 8:08X}
+        """
 
     # Send branch is not 4 bytes aligned :(
     # 0x21E59A4 = 1C29
@@ -195,6 +216,8 @@ def generate_action_replay_code(region):
             0{init_addr-2:07X} {init_branch_instr & 0xFFFF:04X}B508
             0{init_addr+2:07X} 2032{(init_branch_instr & 0xFFFF0000) >> 16:04X}
             0{end_addr:07X} {end_branch_instr:08X}
+            # overwrite the buffer addresses
+            {buf_addr_overwrite}
         D2000000 00000000
     """
 

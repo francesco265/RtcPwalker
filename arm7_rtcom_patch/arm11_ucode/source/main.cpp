@@ -26,6 +26,8 @@ extern "C" int handleCommand1(u8 param, u32 stage) {
 		data_size = param;
 	} else if (opcode == 1) {
 		ir_buffer[i++] = param;
+		for (s8 j = 2; j >= 0 && i < data_size; j--)
+			ir_buffer[i++] = *(vu8 *)(RTC_REG_TIMER2 + j);
 
 		// Transfer to buffer finished
 		if (i == data_size)

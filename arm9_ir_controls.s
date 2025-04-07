@@ -26,56 +26,24 @@ WaitACK:
 
 @ r0 = buffer address; returns size of the received data
 IrRecvData:
-	push {r5, r6, lr}
+	push {lr}
 
-	mov r5, r0
 	mov r1, #0
 	mov r2, #2
 	bl MakeRequest
 
-	cmp r0, #1
-	bls Return
-	
-	mov r6, r0
-	@ Invalidate cache (r5 = address, r6 = size)
-	add	r6, r6, r5
-	tst	r5, #31
-	mcrne	p15, 0, r5, c7, c10, 1
-	tst	r6, #31
-	mcrne	p15, 0, r6, c7, c10, 1
-	bic	r5, r5, #31
-Invalidate:
-	mcr	p15, 0, r5, c7, c6, 1
-	add	r5, r5, #31
-	cmp	r5, r6
-	blt	Invalidate
-	
-Return:
-	pop {r5, r6, lr}
+	pop {lr}
 	bx lr
 
 @ r0 = buffer address, r1 = buffer size
 IrSendData:
-	push {r5, r6, lr}
-
-	mov r5, r0
-	mov r6, r1
-	@ Flush cache to memory (r5 = address, r6 = size)
-	add r6, r6, r5
-	bic r5, r5, #31
-Flush:
-	mcr p15, 0, r5, c7, c14, 1
-	add r5, r5, #32
-	cmp r5, r6
-	blt Flush
-	mov r5, #0
-	mcr p15, 0, r5, c7, c10, 4
+	push {lr}
 
 	@ Make request to arm7
 	mov r2, #1
 	bl MakeRequest
 	
-	pop {r5, r6, lr}
+	pop {lr}
 	bx lr
 
 IrInit:

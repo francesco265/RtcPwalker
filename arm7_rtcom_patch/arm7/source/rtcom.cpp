@@ -31,6 +31,7 @@
 #define RTC_READ_HOUR_MINUTE_SECOND 0x67
 #define RTC_READ_ALARM_TIME_1 0x69
 #define RTC_READ_ALARM_TIME_2 0x6B
+#define RTC_WRITE_ALARM_TIME_2 0x6A
 
 #define RTC_READ_COUNTER_EXT 0x71
 #define RTC_READ_FOUT1_EXT 0x73
@@ -239,6 +240,11 @@ void readTimer2(u8 *readVal, u32 readValLen) {
     rtcTransferReversed(&readCmd, 1, readVal, readValLen);
 }
 
+void writeTimer2(u8 *writeVal) {
+	u8 writeCmd[4] = {RTC_WRITE_ALARM_TIME_2, writeVal[0], writeVal[1], writeVal[2]};
+	rtcTransferReversed(writeCmd, 4, 0, 0);
+}
+
 void Init_RTCom() {
     int savedIrq = enterCriticalSection();
     while (true) {
@@ -297,8 +303,10 @@ __attribute__((target("arm"))) void Ir_service() {
 		case 1:
 			rtcom_executeUCode(1);
 			rtcom_requestNext(ipc_proto->size);
-			for (u8 i = 0; i < ipc_proto->size; i++)
+			for (u8 i = 0; i < ipc_proto->size; i += 4) {
+				writeTimer2((u8 *)(ipc_proto->data + i + 1));
 				rtcom_requestNext(ipc_proto->data[i]);
+			}
 			break;
 		// Recv data
 		case 2:
@@ -344,6 +352,7 @@ __attribute__((target("arm"))) void Update_RTCom() {
 		// Overwrite the IRQ handler jumptable entry for IPCSYNC
 		fastMode = true;
 		((u32 **) IRQ_JUMPTABLE_ADDR)[16] = (u32 *) Ir_service;
+		// Ir_service();
 		RTCOM_STATE_TIMER += 1;
         break;
 	case Finish:
