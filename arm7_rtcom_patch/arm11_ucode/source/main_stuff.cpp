@@ -24,22 +24,47 @@
 u8 ir_buffer[136];
 static u8 ir_buffer_size = 0;
 
+static inline void sleep(vu32 n) {
+	while (n--);
+}
+
 void ir_init() {
 	I2C_init();
 
-	// Set baud rate
-	u8 lcr = I2C_read(REG_LCR);
+	// Disable transmitter and receiver
+	I2C_write(REG_EFCR, 0x06);
+	// Clear and disable FIFOs
+	I2C_write(REG_FCR, 0x06);
+	sleep(20000);
 
-	// Enable access to DLL and DLH
-	I2C_write(REG_LCR, lcr | BIT(7));
 	// Disable sleep mode
 	I2C_write(REG_IER, 0);
+	I2C_write(REG_IOSTATE, 0);
 
+	// Set baud rate
+	// Enable access to DLL and DLH
+	I2C_write(REG_LCR, 0x03 | BIT(7));
 	I2C_write(REG_DLL, 10);
 	I2C_write(REG_DLH, 0);
+	I2C_write(REG_LCR, 0x03);
 
-	I2C_write(REG_LCR, lcr);
+	sleep(20000);
+
+	// Read DLL and DLH
+	I2C_write(REG_LCR, 0x03 | BIT(7));
+	I2C_read(REG_DLL);
+	I2C_read(REG_DLH);
+	I2C_write(REG_LCR, 0x03);
+
+	// Re-write baud rate, just to be sure
+	I2C_write(REG_LCR, 0x03 | BIT(7));
+	I2C_write(REG_DLL, 10);
+	I2C_write(REG_DLH, 0);
+	I2C_write(REG_LCR, 0x03);
+
+	// Enable sleep mode
 	I2C_write(REG_IER, BIT(4));
+	I2C_write(REG_IOSTATE, BIT(0));
 }
 
 void ir_beginComm() {
@@ -128,8 +153,6 @@ u8 ir_recv() {
 		ir_buffer_size = 0;
 		return tc;
 	}
-
-	u8 *ptr = ir_buffer;
 
 	// Reset and enable FIFO
 	I2C_write(REG_FCR, 0x07);
