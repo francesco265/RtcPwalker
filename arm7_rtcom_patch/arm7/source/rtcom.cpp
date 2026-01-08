@@ -11,6 +11,7 @@
 // Delay (in swiDelay units) for each bit transfer
 #define RTC_DELAY 48
 
+#define RTC_CR8 *((vu8 *)0x4000138)
 // Pin defines on RTC_CR
 #define CS_0 (1 << 6)
 #define CS_1 ((1 << 6) | (1 << 2))

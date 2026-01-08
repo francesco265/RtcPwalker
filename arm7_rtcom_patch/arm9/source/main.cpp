@@ -54,7 +54,7 @@ int main() {
 	Ipc_proto *ipc_proto = (Ipc_proto *)RTCOM_DATA_OUTPUT;
 	u16 checksum;
 
-    while (true) {
+    while (pmMainLoop()) {
         glViewport(0, 0, 255, 191);
 
         scanKeys();
